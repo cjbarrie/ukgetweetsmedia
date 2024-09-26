@@ -1,4 +1,5 @@
 pandas
 requests
-opencv-python
+beautifulsoup4
 tqdm
+concurrentlog
