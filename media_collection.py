@@ -21,13 +21,18 @@ def hash_url(url):
 
 # Image download function
 def download_image(image_url, image_hash, download_dir):
-    """Download a single image."""
+    """Download a single image if it hasn't already been downloaded."""
+    file_name = f"{image_hash}.jpg"
+    file_path = os.path.join(download_dir, file_name)
+    
+    # Check if the file already exists
+    if os.path.exists(file_path):
+        logging.info(f"Image already exists: {file_path}. Skipping download.")
+        return
+
     try:
         response = requests.get(image_url)
         response.raise_for_status()
-
-        file_name = f"{image_hash}.jpg"
-        file_path = os.path.join(download_dir, file_name)
 
         # Save the image content
         with open(file_path, 'wb') as file:
@@ -68,12 +73,18 @@ def extract_highest_quality_video_url(api_url):
 
 # Video download function
 def download_video(url, video_hash, download_dir):
-    """Download a video from a URL into a file path."""
+    """Download a video from a URL into a file path if it hasn't already been downloaded."""
+    file_name = f"{video_hash}.mp4"
+    file_path = os.path.join(download_dir, file_name)
+
+    # Check if the file already exists
+    if os.path.exists(file_path):
+        logging.info(f"Video already exists: {file_path}. Skipping download.")
+        return
+
     try:
-        file_name = f"{video_hash}.mp4"
-        file_path = os.path.join(download_dir, file_name)
-        
         response = requests.get(url, stream=True)
+        response.raise_for_status()
         total_size = int(response.headers.get("content-length", 0))
         block_size = 1024
         progress_bar = tqdm(total=total_size, unit="B", unit_scale=True, desc=f"Downloading {file_path}")
@@ -101,9 +112,6 @@ def download_videos(csv_path, download_dir):
 
     # Generate video hashes
     unique_videos['video_hash'] = unique_videos['video_url'].apply(lambda x: hash_url(x) if pd.notna(x) else None)
-    
-    # Load existing hashed files in the download directory
-    existing_files = {filename.split('.')[0] for filename in os.listdir(download_dir) if filename.endswith('.mp4')}
 
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = []
@@ -112,12 +120,17 @@ def download_videos(csv_path, download_dir):
             video_hash = row['video_hash']
 
             # Check if the file already exists
-            if video_hash not in existing_files:
-                try:
-                    highest_quality_url = extract_highest_quality_video_url(f"https://twitsave.com/info?url={video_url}")
-                    futures.append(executor.submit(download_video, highest_quality_url, video_hash, download_dir))
-                except Exception as err:
-                    logging.error(f"An error occurred while extracting video URL: {err}")
+            file_name = f"{video_hash}.mp4"
+            file_path = os.path.join(download_dir, file_name)
+            if os.path.exists(file_path):
+                logging.info(f"Video already exists: {file_path}. Skipping download.")
+                continue
+
+            try:
+                highest_quality_url = extract_highest_quality_video_url(f"https://twitsave.com/info?url={video_url}")
+                futures.append(executor.submit(download_video, highest_quality_url, video_hash, download_dir))
+            except Exception as err:
+                logging.error(f"An error occurred while extracting video URL: {err}")
         
         for future in as_completed(futures):
             future.result()  # Trigger any exceptions
@@ -129,8 +142,11 @@ def run_media_collection():
     csv_path_videos = 'data/processed/sampled_videos.csv'
     
     # Relative paths for saving media files
-    # image_save_dir = 'collected/images' # change to this for HPC collection
-    # video_save_dir = 'collected/videos' # change to this for HPC collection
+    # Uncomment these lines for HPC collection
+    # image_save_dir = 'collected/images'
+    # video_save_dir = 'collected/videos'
+    
+    # Uncomment these lines for local collection on the external drive
     image_save_dir = '/Volumes/T7/ukgetweets2/collected/images'
     video_save_dir = '/Volumes/T7/ukgetweets2/collected/videos'
     
